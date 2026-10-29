@@ -10,4 +10,11 @@ Skrivetræning for Frede: korte øvelser hvor talesprog bliver til klare, hele s
 
 Hele appen er én fil: `index.html`. Fremskridt gemmes i browseren (localStorage).
 
-På GitHub Pages kører appen uden Claude: lamperne tjekker teksten med det samme, og man sammenligner med et godt bud. Claudes personlige feedback virker kun, når siden åbnes som artifact på claude.ai.
+## Claude som skrivecoach
+
+- **På claude.ai** (som artifact) bruger appen den indloggede Claude-konto.
+- **På GitHub Pages** kalder appen Claude API'et direkte fra browseren med en API-nøgle, som en voksen sætter ind nederst på forsiden ("For voksne: slå Claude til på denne enhed"). Nøglen gemmes kun i den browsers localStorage og er aldrig en del af koden her.
+  - Lav en nøgle kun til Punktum på https://console.anthropic.com/settings/keys og sæt en lille månedlig udgiftsgrænse.
+  - Uden nøgle kører appen i øvetilstand: lamperne tjekker teksten, og man sammenligner med et godt bud.
+
+`vendor/anthropic-sdk-0.134.0.js` er Anthropics officielle JavaScript-SDK (`@anthropic-ai/sdk`, MIT-licens, se `vendor/anthropic-sdk-LICENSE`) samlet til én browserfil.
