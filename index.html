@@ -303,7 +303,7 @@ ul.tips{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
       </div>
       <p class="note">Tryk på en gul sætning for at rette den. Du kan også trykke på alle de andre.</p>
       <div class="marked" id="egenMarked"></div>
-      <p class="note">Appen finder talesprog, lange sætninger og halve sætninger. Den kan ikke se, om indholdet er rigtigt. Læs altid teksten højt, før du afleverer.</p>
+      <p class="note">Appen finder talesprog, lange og halve sætninger og de mest almindelige fejl i, hvordan sætninger er bygget op. Den finder ikke alt, og den kan ikke se, om indholdet er rigtigt. Læs altid teksten højt, før du afleverer.</p>
       <div class="actions">
         <button class="btn primary" id="copyBtn">Kopiér teksten</button>
         <button class="btn ghost" id="editAll">Ret i hele teksten</button>
@@ -599,7 +599,130 @@ function taleTip(word){
   return `Slet “${word}”. Læs sætningen uden. Betyder den det samme?`;
 }
 const HALF = /^(?:fordi|selvom|så at|hvilket)(?![\p{L}\p{N}])/iu;
-const KINDS = {tale:"talesprog", ogsaa:"“og så”", long:"lange sætninger", og:"mange “og”", caps:"stort bogstav", end:"punktum mangler", half:"halve sætninger", start:"starter med “og”", repeat:"samme start", claude:"Claude"};
+const KINDS = {tale:"talesprog", ogsaa:"“og så”", long:"lange sætninger", og:"mange “og”", caps:"stort bogstav", end:"punktum mangler", half:"halve sætninger", start:"starter med “og”", repeat:"samme start", order:"ordenes rækkefølge", splice:"komma eller punktum", rverb:"r eller ikke r", ogat:"“og” eller “at”", dedem:"“de” eller “dem”", sin:"“sin” eller “hans”", stav:"stavning", claude:"Claude"};
+/* ---------- Sætningsopbygning: de klassiske fejl, når man skriver som man taler ----------
+   Not a full parser. A small verb lexicon plus narrow rules, each tuned to stay quiet on correct text,
+   and each tip shows the fix in the child's own words instead of naming grammar. */
+// Regular verbs: present = infinitive + r. G1 past -ede, G2 past -te.
+const VG1 = "spille snakke lave hoppe danse kigge vente arbejde huske elske hade prøve åbne lukke lytte råbe smile grine cykle træne starte stoppe hente ringe svare regne tegne male bade fiske handle klare kaste sparke samle forklare opleve vaske pakke lande passe fange mangle ændre flytte slutte leve love bygge skifte savne lege håbe miste gætte sejle svømme jage ønske ligne opdage overleve chatte game skate streame scrolle kede behøve vandre virke ende hade hoste nyse glæde hygge plage drille pjække dukke rydde ".trim().split(/\s+/);
+const VG2 = "købe kende tænke læse bruge høre lære køre sende vende begynde føle låne vise glemme rejse spise besøge forsøge bestemme hilse betale nævne møde kalde dræbe mene tjene tænde tabe ".trim().split(/\s+/);
+// Irregular: infinitive present past
+const VIRR = `være er var|have har havde|gå går gik|få får fik|se ser så|give giver gav|tage tager tog|komme kommer kom|sige siger sagde|gøre gør gjorde|vide ved vidste|ligge ligger lå|lægge lægger lagde|sidde sidder sad|stå står stod|blive bliver blev|skrive skriver skrev|finde finder fandt|drikke drikker drak|sove sover sov|løbe løber løb|hedde hedder hed|tro tror troede|bo bor boede|slå slår slog|flyve flyver fløj|falde falder faldt|holde holder holdt|hjælpe hjælper hjalp|vinde vinder vandt|synge synger sang|springe springer sprang|trække trækker trak|smide smider smed|bide bider bed|fortælle fortæller fortalte|vælge vælger valgte|spørge spørger spurgte|sælge sælger solgte|sætte sætter satte|skrige skriger skreg|stjæle stjæler stjal|ødelægge ødelægger ødelagde|beskrive beskriver beskrev|forstå forstår forstod|betyde betyder betød|lyde lyder lød|skyde skyder skød|fryse fryser frøs|gide gider gad|forsvinde forsvinder forsvandt|glide glider gled|nyde nyder nød`;
+const MODALS = {kan:"kunne", vil:"ville", skal:"skulle", "må":"måtte", "tør":"turde", "bør":"burde", gider:"gide"};
+const INF = new Set(), PRES2INF = new Map(), FIN = new Set(Object.keys(MODALS).concat(["kunne","ville","skulle","måtte","turde","burde","gad","synes","syntes"]));
+for (const v of VG1) { INF.add(v); PRES2INF.set(v + "r", v); FIN.add(v + "r"); FIN.add(v + "de"); }
+for (const v of VG2) { INF.add(v); PRES2INF.set(v + "r", v); FIN.add(v + "r"); FIN.add(v.replace(/e$/, "").replace(/(\p{L})\1$/u, "$1") + "te"); }
+for (const row of VIRR.split("|")) { const [i, p, past] = row.split(" "); INF.add(i); PRES2INF.set(p, i); FIN.add(p); FIN.add(past); }
+for (const w of ["så","ved","bar","sang","bed","nød","hed","løb","lå"]) FIN.delete(w);   // also everyday nouns/adverbs
+for (const w of ["ved","nød"]) PRES2INF.delete(w);
+INF.delete("le");
+const SUBJ = new Set(["jeg","du","han","hun","vi","de","man","den","det"]);
+const PERS = new Set(["jeg","du","han","hun","vi","man"]);
+const ADV1 = new Set(["ikke","aldrig","altid","også","bare","kun","ofte","tit","stadig","faktisk","nok","gerne","godt","jo","heller","lige","snart","allerede"]);
+const SUBCONJ = new Set(["fordi","at","hvis","når","selvom","mens","da","som","om","hvor","indtil","før","siden"]);
+const SUBFRONT = new Set(["da","når","hvis","fordi","selvom","mens","inden","før","siden","efter"]);
+const FRONT = ["i går","i dag","i morgen","bagefter","derefter","senere","så","derfor","til sidst","først","pludselig","heldigvis","desværre","måske","efter skole","om aftenen","om morgenen","om natten","sidste år","næste dag","dagen efter","i weekenden","i sommerferien","alligevel","nogle gange","tit","tidligere","dengang"];
+const SAY = new Set(["tror","troede","synes","syntes","ved","vidste","håber","håbede","mener","mente","sagde","siger","tænkte","tænker","fortalte","fortæller","føler","følte","sige","tro","håbe"]);
+const MODTRIG = new Set(["at","vil","kan","skal","må","gider","tør","bør","kunne","ville","skulle","måtte","burde","turde"]);
+const NOINV = new Set(["vil","kan","skal","må","gider","tør","bør","kunne","ville","skulle","måtte","burde","turde","lad","lod","hørte","ser","hører","plejer","får","fik","mon"]);
+const OGTRIG = new Set(["for","prøve","prøver","prøvede","begynde","begynder","begyndte","gider","gad","plejer","plejede","glemte","glemmer","elsker","hader","besluttede","beslutter","lovede","lover","håber","håbede","startede","starter","stoppede","stopper","nåede","lærte","ønsker","ønskede","valgte","vælger","orker","orkede"]);
+const OWN = {mor:"sin",far:"sin",bror:"sin",søster:"sin",ven:"sin",veninde:"sin",kæreste:"sin",hund:"sin",kat:"sin",cykel:"sin",telefon:"sin",mobil:"sin",lærer:"sin",familie:"sin",taske:"sin",bog:"sin",mormor:"sin",farmor:"sin",morfar:"sin",farfar:"sin",onkel:"sin",moster:"sin",faster:"sin",bedstemor:"sin",bedstefar:"sin",kone:"sin",mand:"sin",datter:"sin",søn:"sin",værelse:"sit",hus:"sit",hjem:"sit",liv:"sit",navn:"sit",tøj:"sit",forældre:"sine",venner:"sine",søskende:"sine",børn:"sine",lektier:"sine"};
+const OBJ2SUBJ = {mig:"jeg", ham:"han", hende:"hun", os:"vi", dem:"de"};
+const STAV = [
+  [/(?<![\p{L}])nogen gange(?![\p{L}])/iu, "nogle gange"], [/(?<![\p{L}])nød til(?![\p{L}])/iu, "nødt til"],
+  [/(?<![\p{L}])ihvertfald(?![\p{L}])/iu, "i hvert fald"], [/(?<![\p{L}])idag(?![\p{L}])/iu, "i dag"], [/(?<![\p{L}])igår(?![\p{L}])/iu, "i går"],
+  [/(?<![\p{L}])imorgen(?![\p{L}])/iu, "i morgen"], [/(?<![\p{L}])istedet(?![\p{L}])/iu, "i stedet"], [/(?<![\p{L}])tilsidst(?![\p{L}])/iu, "til sidst"],
+  [/(?<![\p{L}])iforvejen(?![\p{L}])/iu, "i forvejen"], [/(?<![\p{L}])overhoved(?![\p{L}])/iu, "overhovedet"],
+  [/(?<![\p{L}])(grine|griner|grinede|grinte|grint) af(?![\p{L}])/iu, m => m[1] + " ad"]
+];
+const q = s => `“${s}”`;
+function structureIssues(s){
+  const iss = [], toks = [...s.matchAll(/\p{L}+(?:[-']\p{L}+)*/gu)].map(m => ({w:m[0], l:m[0].toLowerCase(), i:m.index, end:m.index + m[0].length}));
+  const gap = k => s.slice(toks[k-1].end, toks[k].i);            // text between token k-1 and k
+  const comma = k => k > 0 && gap(k).includes(",");
+  const add = (kind, tip) => { if (!iss.some(x => x.kind === kind)) iss.push({kind, tip}); };
+  const isName = k => k > 0 && /^\p{Lu}/u.test(toks[k].w) && !comma(k);
+  const T = k => toks[k] ? toks[k].l : "";
+  // 1. "fordi han kan ikke" → "fordi han ikke kan"
+  for (let k = 0; k + 3 < toks.length; k++) {
+    if (!SUBCONJ.has(T(k)) || comma(k+1) || comma(k+2) || comma(k+3)) continue;
+    if (!(SUBJ.has(T(k+1)) || isName(k+1)) || !FIN.has(T(k+2)) || !ADV1.has(T(k+3))) continue;
+    const adv = T(k+3) === "heller" && T(k+4) === "ikke" ? "heller ikke" : toks[k+3].w;
+    add("order", `Byt om på ordene: skriv ${q(`${toks[k].w} ${toks[k+1].w} ${adv} ${toks[k+2].w}`)} i stedet for ${q(`${toks[k].w} ${toks[k+1].w} ${toks[k+2].w} ${adv}`)}.`);
+  }
+  // 2. "I går vi gik" → "I går gik vi"
+  const low = toks.map(t => t.l);
+  for (const f of FRONT) {
+    const fl = f.split(" "), n = fl.length;
+    if (low.slice(0, n).join(" ") !== f || !PERS.has(T(n)) && T(n) !== "de" || !FIN.has(T(n+1)) || comma(n+1)) continue;
+    const front = s.slice(0, toks[n-1].end);
+    add("order", `Byt om på ordene efter ${q(front)}: skriv ${q(`${front} ${toks[n+1].w} ${toks[n].w}`)}.`);
+  }
+  // 3. "Da jeg kom hjem, jeg var træt" → "…, var jeg træt"
+  const startsSub = SUBFRONT.has(T(0));
+  if (startsSub) {
+    const c = toks.findIndex((t, k) => k > 1 && comma(k));
+    if (c > 0 && SUBJ.has(T(c)) && FIN.has(T(c+1)) && !comma(c+1))
+      add("order", `Byt om på de to ord efter kommaet: skriv ${q(`${toks[c+1].w} ${toks[c].w}`)} i stedet for ${q(`${toks[c].w} ${toks[c+1].w}`)}.`);
+  }
+  // 4. Two whole sentences glued with a comma: "Jeg gik hjem, jeg var træt."
+  if (!startsSub && !iss.length) {
+    for (let k = 2; k + 1 < toks.length; k++) {
+      if (!comma(k) || !SUBJ.has(T(k)) || !FIN.has(T(k+1)) || comma(k+1)) continue;
+      let from = k - 1; while (from > 0 && !comma(from)) from--;
+      const before = toks.slice(from, k);
+      if (!before.some(t => FIN.has(t.l)) || toks.slice(Math.max(0, k-3), k).some(t => SAY.has(t.l))) continue;
+      add("splice", `Her er to hele sætninger med komma imellem. Sæt punktum efter ${q(toks[k-1].w)}, og start forfra med ${q(capWord(toks[k].w))}.`);
+      break;
+    }
+  }
+  // 5a. "at spiller" / "kan går" → "at spille" / "kan gå"
+  for (let k = 0; k + 1 < toks.length; k++) {
+    if (!MODTRIG.has(T(k))) continue;
+    let v = k + 1; if (ADV1.has(T(v))) v++;
+    const inf = PRES2INF.get(T(v)); if (!inf || comma(v)) continue;
+    const mid = v > k + 1 ? toks[k+1].w + " " : "";
+    add("rverb", `Efter ${q(toks[k].w)} skal ordet ikke ende på r: skriv ${q(`${toks[k].w} ${mid}${inf}`)}.`);
+  }
+  // 5b. "han spille" → "han spiller"
+  for (let k = 0; k + 1 < toks.length; k++) {
+    if (!PERS.has(T(k)) || !INF.has(T(k+1)) || comma(k+1) || NOINV.has(T(k-1)) || T(k+2) === "at") continue;
+    const pres = [...PRES2INF].find(([, i]) => i === T(k+1));
+    if (pres) add("rverb", `Mangler der et r? Skriv ${q(`${toks[k].w} ${pres[0]}`)}.`);
+  }
+  // 6. "for og se" → "for at se"
+  for (let k = 0; k + 2 < toks.length; k++)
+    if (OGTRIG.has(T(k)) && T(k+1) === "og" && INF.has(T(k+2)) && !comma(k+1))
+      add("ogat", `Skriv “at” i stedet for “og”: ${q(`${toks[k].w} at ${toks[k+2].w}`)}.`);
+  // 7. "dem gik" → "de gik", "Mig og Oscar gik" → "Oscar og jeg gik"
+  for (let k = 0; k + 1 < toks.length; k++) {
+    if (T(k) !== "dem") continue;
+    const head = k === 0 || ["og","men","fordi","at","når","hvis","da","så","selvom","mens","hvor","som"].includes(T(k-1));
+    if (head && ((FIN.has(T(k+1)) && !SUBJ.has(T(k+2))) || (k === 0 && T(k+1) === "der")))
+      add("dedem", `Skriv “de” i stedet for “dem”, når det er dem, der gør noget: ${q(`${k === 0 ? "De" : "de"} ${toks[k+1].w}`)}.`);
+  }
+  const v0 = FIN.has(T(3)) ? 3 : FIN.has(T(4)) ? 4 : 0;
+  if (OBJ2SUBJ[T(0)] && T(1) === "og" && v0) {
+    const other = toks.slice(2, v0).map(t => t.w).join(" ");
+    add("dedem", `Skriv ${q(`${capWord(other)} og ${OBJ2SUBJ[T(0)]}`)} i stedet for ${q(`${toks[0].w} og ${other}`)}, når I er dem, der gør noget.`);
+  }
+  // 8. "Han ringede til hans mor" → "sin mor"? (asked as a question: it may be someone else's)
+  for (let k = 0; k < toks.length; k++) {
+    if (T(k) !== "han" && T(k) !== "hun") continue;
+    for (let j = k + 1; j < Math.min(toks.length - 1, k + 6); j++) {
+      if (comma(j) || ["og","men","fordi","at","når","der","som","mens","hvis"].includes(T(j))) break;
+      const pos = T(k) === "han" ? "hans" : "hendes";
+      if (toks[j].w === pos && OWN[T(j+1)]) { add("sin", `Er det ${pos} egen ${toks[j+1].w}? Så skriv ${q(`${OWN[T(j+1)]} ${toks[j+1].w}`)}.`); break; }
+    }
+  }
+  // 9. Common mix-ups that spellcheck misses
+  for (const [re, fix] of STAV) {
+    const m = s.match(re); if (!m || !fix) continue;
+    add("stav", `Skriv ${q(typeof fix === "function" ? fix(m) : fix)} i stedet for ${q(m[0])}.`);
+  }
+  return iss;
+}
+
 // Everything worth a closer look in one sentence, each with a concrete tip. No grammar words.
 function sentenceIssues(s, prevStarts = []){
   const iss = [], wc = words(s), seen = new Set();
@@ -620,6 +743,7 @@ function sentenceIssues(s, prevStarts = []){
   if (/^og\s+(?!så(?![\p{L}]))/iu.test(s)) iss.push({kind:"start", tip:"Sætningen starter med “Og”. Slet det. Står sætningen stadig fint?"});
   const fw = firstWord(s).toLowerCase();
   if (fw && prevStarts.length >= 2 && prevStarts.slice(-2).every(x => x === fw)) iss.push({kind:"repeat", tip:`Tre sætninger i træk starter med “${capWord(fw)}”. Begynd denne på en anden måde.`});
+  for (const x of structureIssues(s)) if (!(x.kind === "splice" && iss.some(i => i.kind === "long"))) iss.push(x);
   return iss;
 }
 // Concrete tips for an exercise answer when Claude is not reading along.
@@ -908,7 +1032,7 @@ function finish(){
 /* ---------- Egen tekst ----------
    The text is the record: E.text is cut into sentences on every render, flagged sentences are
    clickable, and a fix is written straight back into the text. Works with or without Claude. */
-const SAMPLE = "Novellen handler om en dreng der hedder Malte og han er ligesom meget ensom. og så en dag møder han en gammel mand i parken og de begynder at snakke og så bliver de venner. Fordi Malte ikke har nogen andre. Manden han fortæller om krigen og det er mega spændende for Malte. Jeg synes novellen er god fordi at den viser at venskab kan opstå alle steder";
+const SAMPLE = "Novellen handler om en dreng der hedder Malte og han er ligesom meget ensom. og så en dag møder han en gammel mand i parken og de begynder at snakke og så bliver de venner. Fordi Malte har ikke nogen andre. Manden han fortæller om krigen og det er mega spændende for Malte. Da Malte kommer hjem, han fortæller det til hans mor. Jeg synes novellen er god fordi at den viser at venskab kan opstå alle steder";
 const freshE = () => ({text:"", skipped:new Set(), fixed:new Set(), claude:new Map(), ros:"", startFlags:0, open:null});
 const E = freshE();
 const isFlag = sg => sg.issues.length > 0 && !E.skipped.has(sg.key);
