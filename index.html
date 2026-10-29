@@ -159,11 +159,21 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
 
 /* own text */
 .marked{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;font-size:17.5px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
-.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14.5px;color:var(--muted)}
-.rw{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
-.rw .orig{font-style:italic;font-size:17.5px}
-.rw textarea.paper{min-height:98px}
-.rw .fb{border:0;padding:0}
+.marked .sent{cursor:pointer;border-radius:4px;padding:1px 0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.marked .sent:hover{background:var(--rule)}
+.marked .sent.flag{background:var(--warn-bg);text-decoration:underline;text-decoration-color:var(--warn);text-decoration-thickness:2px;text-underline-offset:5px}
+.marked .sent.fixed{background:var(--good-bg)}
+.marked .sent.skipped{opacity:.6}
+.marked .sent.open{outline:2px solid var(--accent);outline-offset:1px}
+.edit{white-space:normal;display:flex;flex-direction:column;gap:10px;margin:10px 0 16px;padding:14px;border-radius:14px;background:var(--paper);border:1.5px solid var(--accent);line-height:1.55;font-size:17px}
+.edit textarea.paper{min-height:98px}
+.summary{display:flex;flex-direction:column;gap:10px}
+.summary .big{font-family:var(--display);font-weight:700;font-size:20px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13.5px;padding:3px 10px;border-radius:999px;background:var(--warn-bg);color:var(--warn)}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--good);transition:width .3s}
+ul.tips{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .keybox{border-top:1px solid var(--line);padding-top:16px}
 .keybox summary{cursor:pointer;color:var(--muted);font-size:15px}
 .keybody{display:flex;flex-direction:column;gap:10px;margin-top:12px;max-width:60ch}
@@ -177,7 +187,7 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
   <header class="top">
     <button class="logo" id="logo" aria-label="Til forsiden">Punktum<i></i></button>
     <div class="pills">
-      <span class="pill" id="streakPill"><b id="streakN">0</b> dage i træk</span>
+      <span class="pill" id="streakPill"><b id="streakN">0</b> <span id="streakWord">dage</span> i træk</span>
       <span class="pill" id="claudePill">Forbinder til Claude …</span>
     </div>
   </header>
@@ -276,16 +286,30 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
       <button class="btn link" id="quitEgen">Til forsiden</button>
     </div>
     <h2>Gør din skoletekst skarpere</h2>
-    <p class="trick">Sæt en tekst ind, du har skrevet til skolen. Du får ikke teksten skrevet om. Du får peget på de sætninger, du selv skal rette.</p>
-    <label for="egenTekst" class="label">Din tekst</label>
-    <textarea id="egenTekst" class="paper big" spellcheck="true" lang="da" placeholder="Sæt din tekst ind her …"></textarea>
-    <div class="actions">
-      <button class="btn primary" id="markBtn" disabled>Find talesprog</button>
-      <button class="btn ghost" id="findBtn" hidden>Giv mig 3 sætninger at øve på</button>
+    <p class="trick">Sæt en tekst ind, du har skrevet til skolen. Du får den ikke skrevet om. Du får vist de sætninger, du selv skal rette, og retter dem én ad gangen.</p>
+    <div id="egenInput" class="section">
+      <label for="egenTekst" class="label">Din tekst</label>
+      <textarea id="egenTekst" class="paper big" spellcheck="true" lang="da" placeholder="Sæt din tekst ind her …"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="markBtn" disabled>Tjek teksten</button>
+        <button class="btn link" id="egenSample">Prøv med et eksempel</button>
+      </div>
     </div>
-    <div id="egenOut" class="section"></div>
-    <div id="egenRw" class="section"></div>
-    <div id="egenFinal" class="section"></div>
+    <div id="egenWork" class="section" hidden>
+      <div class="summary" id="egenSummary" aria-live="polite"></div>
+      <div class="actions">
+        <button class="btn ghost" id="ttsAll" hidden>Lyt til teksten</button>
+        <button class="btn ghost" id="findBtn" hidden>Find mere med Claude</button>
+      </div>
+      <p class="note">Tryk på en gul sætning for at rette den. Du kan også trykke på alle de andre.</p>
+      <div class="marked" id="egenMarked"></div>
+      <p class="note">Appen finder talesprog, lange sætninger og halve sætninger. Den kan ikke se, om indholdet er rigtigt. Læs altid teksten højt, før du afleverer.</p>
+      <div class="actions">
+        <button class="btn primary" id="copyBtn">Kopiér teksten</button>
+        <button class="btn ghost" id="editAll">Ret i hele teksten</button>
+        <button class="btn link" id="newText">Ny tekst</button>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -390,7 +414,7 @@ function paintClaude(){
     ? "Ca. 10 minutter. Du skriver, lamperne viser hvad der skal rettes, og du sammenligner med et godt bud. Ingen grammatik."
     : "Ca. 10 minutter. Du skriver, Claude læser med og giver dig ét godt råd ad gangen. Ingen grammatik.";
   p.textContent = claudeState==="on" ? "Claude læser med" : claudeState==="off" ? "Øvetilstand uden Claude" : "Forbinder til Claude …";
-  document.getElementById("findBtn").hidden = claudeState!=="on" || !document.getElementById("egenOut").childElementCount;
+  document.getElementById("findBtn").hidden = claudeState!=="on";
 }
 const HARD_OFF = ["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed","bad_key"];
 function claudeError(e){
@@ -501,7 +525,7 @@ const STOP = new Set(["siden","inden","uden","igen","neden","oven","bagen"]);
 const DOUBLE = /(?:^|(?<=[.!?]\s+)|(?<=(?:^|\s)(?:fordi|og|men)\s+))(\p{L}{3,}(?:en|et|ne))\s+(han|hun|den|det|de)(?=\s)/giu;
 const OGSAA = W("og så");
 
-function findTale(text){
+function findTale(text, withOgsaa = true){
   const hits = [];
   for (const t of TALE) for (const m of text.matchAll(t.re)) hits.push({i:m.index, len:m[0].length, word:m[0], why:t.why});
   for (const m of text.matchAll(DOUBLE)) {
@@ -509,7 +533,7 @@ function findTale(text){
     hits.push({i:m.index, len:m[0].length, word:m[0], why:"dobbelt: vælg ét af ordene"});
   }
   const og = [...text.matchAll(OGSAA)];
-  if (og.length >= 2) for (const m of og) hits.push({i:m.index, len:m[0].length, word:m[0], why:"mange “og så”"});
+  if (withOgsaa && og.length >= 2) for (const m of og) hits.push({i:m.index, len:m[0].length, word:m[0], why:"mange “og så”"});
   hits.sort((a,b)=>a.i-b.i);
   return hits.filter((h,k)=>!k || h.i >= hits[k-1].i + hits[k-1].len);
 }
@@ -528,8 +552,101 @@ function analyse(text){
     short: longs.length === 0
   };
 }
-function paintLights(text){
-  const a = analyse(text), L = document.getElementById("lights"), H = document.getElementById("hint");
+/* ---------- Sætninger: del teksten op og find det, der skal rettes ---------- */
+const ABBR = new Set(["fx","f.eks","bl.a","osv","ca","kl","nr","dvs","mht","pga","evt","jf","inkl","ift","mv","etc","hhv","vha","stk","tlf","m.m","o.l"]);
+// Splits text into sentences ("s") and the whitespace between them ("g"), keeping positions.
+function segment(text){
+  const out = [], n = text.length; let start = 0, i = 0;
+  const add = (a, b) => {
+    if (b <= a) return;
+    const chunk = text.slice(a, b), lead = chunk.match(/^\s*/)[0].length;
+    if (lead === chunk.length) { out.push({t:"g", text:chunk, start:a, end:b}); return; }
+    const trail = chunk.match(/\s*$/)[0].length;
+    if (lead) out.push({t:"g", text:chunk.slice(0, lead), start:a, end:a+lead});
+    out.push({t:"s", text:chunk.slice(lead, chunk.length-trail), start:a+lead, end:b-trail});
+    if (trail) out.push({t:"g", text:chunk.slice(chunk.length-trail), start:b-trail, end:b});
+  };
+  while (i < n) {
+    const ch = text[i];
+    if (ch === "\n") { add(start, i); start = i; while (i < n && /\s/.test(text[i])) i++; add(start, i); start = i; continue; }
+    if (".!?…".includes(ch)) {
+      let j = i; while (j < n && /[.!?…"”»')]/.test(text[j])) j++;
+      if (j >= n || /\s/.test(text[j])) {
+        const tok = ((text.slice(start, i).match(/(\S+)$/) || ["",""])[1]).toLowerCase().replace(/^[^\p{L}\d]+/u, "");
+        let k = j; while (k < n && text[k] === " ") k++;
+        const abbr = ch === "." && j === i + 1 && (ABBR.has(tok) || (/^\d+$/.test(tok) && /\p{Ll}/u.test(text[k] || "")));
+        if (!abbr) { add(start, j); start = i = j; continue; }
+      }
+      i = j; continue;
+    }
+    i++;
+  }
+  add(start, n);
+  return out;
+}
+const norm = s => s.replace(/\s+/g, " ").trim().toLowerCase();
+const firstWord = s => ((s.match(/\p{L}+/u) || [""])[0]);
+const capWord = w => w.charAt(0).toUpperCase() + w.slice(1);
+function taleTip(word){
+  const w = word.toLowerCase().replace(/\s+/g, " ");
+  if (/^(øh|ehm)/.test(w)) return `Slet “${word}”. Det er en lyd fra tale.`;
+  if (/^(mega|vildt|sindssygt|pisse)$/.test(w)) return `Skriv “meget” i stedet for “${word}”, eller find et mere præcist ord.`;
+  if (/^(lol|nice|basically)$/.test(w)) return `“${word}” hører til en besked til en ven. Skriv hvad du mener med almindelige ord.`;
+  if (/sådan|sådn/.test(w)) return `Slet “${word}”, eller skriv præcist hvad du mener.`;
+  if (w === "det der med") return "Slet “det der med”, og skriv bare hvad det handler om.";
+  if (/ at$/.test(w)) return `Skriv bare “${word.split(/\s+/)[0]}” uden “at”.`;
+  if (/ (han|hun|den|det|de)$/.test(w)) return `“${word}” siger det samme to gange. Skriv bare “${word.split(/\s+/)[0]}”.`;
+  return `Slet “${word}”. Læs sætningen uden. Betyder den det samme?`;
+}
+const HALF = /^(?:fordi|selvom|så at|hvilket)(?![\p{L}\p{N}])/iu;
+const KINDS = {tale:"talesprog", ogsaa:"“og så”", long:"lange sætninger", og:"mange “og”", caps:"stort bogstav", end:"punktum mangler", half:"halve sætninger", start:"starter med “og”", repeat:"samme start", claude:"Claude"};
+// Everything worth a closer look in one sentence, each with a concrete tip. No grammar words.
+function sentenceIssues(s, prevStarts = []){
+  const iss = [], wc = words(s), seen = new Set();
+  for (const h of findTale(s, false)) {
+    const k = h.word.toLowerCase(); if (seen.has(k)) continue; seen.add(k);
+    iss.push({kind:"tale", tip:taleTip(h.word)});
+  }
+  const ogsaa = (s.match(OGSAA) || []).length;
+  if (ogsaa >= 2 || /^og\s+så(?![\p{L}])/iu.test(s) || (ogsaa && wc > 14)) iss.push({kind:"ogsaa", tip:"Sæt punktum i stedet for “og så”, og start forfra med en ny sætning."});
+  const ogs = (s.match(W("og")) || []).length;
+  if (wc > 22) iss.push({kind:"long", tip:`Sætningen er på ${wc} ord. Læs den højt. Hvor du trækker vejret, sætter du punktum.`});
+  else if (ogs >= 3) iss.push({kind:"og", tip:`Der står “og” ${ogs} gange. Prøv at sætte punktum ved et af dem.`});
+  const c = s.match(/\p{L}/u);
+  if (c && c[0] !== c[0].toUpperCase() && /^\p{L}/u.test(s)) iss.push({kind:"caps", tip:"Start sætningen med stort bogstav."});
+  if (!/[.!?…:]["”»')]*$/.test(s) && wc >= 4) iss.push({kind:"end", tip:"Slut sætningen af med punktum."});
+  const m = s.match(HALF);
+  if (m && !s.includes(",")) iss.push({kind:"half", tip:`Sætningen starter med “${capWord(m[0].toLowerCase())}” og hænger ikke sammen alene. Sæt den sammen med sætningen før, eller skriv hele tanken.`});
+  if (/^og\s+(?!så(?![\p{L}]))/iu.test(s)) iss.push({kind:"start", tip:"Sætningen starter med “Og”. Slet det. Står sætningen stadig fint?"});
+  const fw = firstWord(s).toLowerCase();
+  if (fw && prevStarts.length >= 2 && prevStarts.slice(-2).every(x => x === fw)) iss.push({kind:"repeat", tip:`Tre sætninger i træk starter med “${capWord(fw)}”. Begynd denne på en anden måde.`});
+  return iss;
+}
+// Concrete tips for an exercise answer when Claude is not reading along.
+const QSTOP = new Set("hvorfor hvordan hvad hvem hvornår hvilken hvilke hvis begrund svar dit din dine nævn ville skulle kunne gør gøre beskriv forklar kort med tre sætninger mange være det der og en et om på til af for er har kan ikke du man ved sin".split(" "));
+function tipsFor(text, mode, item){
+  const tips = [], r = item.raw;
+  const sents = segment(text).filter(x => x.t === "s").map(x => x.text);
+  if (mode === "del" && sents.length < 2) tips.push("Du har stadig én lang sætning. Sæt punktum mindst to steder.");
+  if (mode === "byg" && sents.length > 2) tips.push(`Du har ${sents.length} sætninger. Saml dem til én eller to med små ord som og, men eller fordi.`);
+  if (mode === "svar") {
+    const keys = [...new Set((r[1].toLowerCase().match(/\p{L}{3,}/gu) || []).filter(w => !QSTOP.has(w)))];
+    const first = (sents[0] || "").toLowerCase();
+    if (/^hv/i.test(r[1]) && keys.length && !keys.some(k => first.includes(k.slice(0, Math.max(4, k.length - 2)))))
+      tips.push(`Start dit svar med ordene fra spørgsmålet, fx “${keys.slice(0, 2).join("”, “")}”.`);
+    if (/begrund|hvorfor/i.test(r[1]) && !/fordi|derfor|nemlig|kan man se|det ses|viser|tyder på|(?<![\p{L}])(?:da|for)(?![\p{L}])/iu.test(text))
+      tips.push("Husk at forklare hvorfor. Brug fx “fordi” eller “Det kan man se på …”.");
+  }
+  const seen = new Set(), starts = [];
+  for (const s of sents) {
+    for (const i of sentenceIssues(s, starts)) if (!seen.has(i.kind) || i.kind === "tale") { seen.add(i.kind); if (!tips.includes(i.tip)) tips.push(i.tip); }
+    starts.push(firstWord(s).toLowerCase());
+  }
+  return tips.slice(0, 3);
+}
+
+function paintLights(text, L = document.getElementById("lights"), H = document.getElementById("hint")){
+  const a = analyse(text);
   const items = [
     ["Stort bogstav", a.caps, "Start hver sætning med stort bogstav."],
     ["Punktum til sidst", a.end, "Slut af med punktum."],
@@ -560,7 +677,8 @@ const views = ["home","taskView","doneView","egenView"];
 function show(id){ views.forEach(v => $(v).hidden = v!==id); window.scrollTo({top:0}); }
 
 function paintHome(){
-  $("streakN").textContent = streak();
+  const st = streak();
+  $("streakN").textContent = st; $("streakWord").textContent = st === 1 ? "dag" : "dage";
   const wk = $("week"); wk.replaceChildren();
   const letters = ["S","M","T","O","T","F","L"]; const set = new Set(store.days);
   for (let k=6; k>=0; k--) {
@@ -755,14 +873,18 @@ async function check(){
   offlineCheck(c, a, box); done();
 }
 function offlineCheck(c, a, box, msg){
-  if (!a.end || !a.caps || a.tale.length) {
+  const tips = tipsFor($("svar").value.trim(), c.mode, c.item);
+  const row = el("div", tips.length ? "fbrow tip" : "fbrow good");
+  if (tips.length) { const ul = el("ul","tips"); tips.forEach(t => ul.append(el("li",null,t))); row.append(el("span","label","Prøv"), ul); }
+  else row.append(el("span","label","Godt"), el("p",null,"Ingen talesprog, og sætningerne ser hele ud."));
+  if (tips.length && c.tries < 2) {
     const card = el("div","fb");
     if (msg) card.append(el("p","note",msg));
-    card.append(el("p",null,"Kig på de gule lamper først. Ret dem, og tjek igen."));
-    box.replaceChildren(card);
-    if (c.tries < 2) return;
+    card.append(row, el("p","note","Ret det, og tjek igen. Efter to forsøg kan du se et godt bud."));
+    box.replaceChildren(card); return;
   }
   renderOffline(box, modelOf(c), n => { c.best = Math.max(c.best, n); if (n===3) c.bestText = $("svar").value.trim(); }, msg);
+  box.firstChild.prepend(row);
 }
 function next(){
   ctl?.abort();
@@ -783,41 +905,154 @@ function finish(){
   paintHome(); show("doneView");
 }
 
-/* ---------- Egen tekst ---------- */
-function markText(text){
-  const box = el("div","marked");
-  for (const sent of text.split(/(?<=[.!?])(\s+)/)) {
-    if (!sent) continue;
-    if (/^\s+$/.test(sent)) { box.append(sent); continue; }
-    const holder = words(sent) > 22 ? el("span","long") : document.createDocumentFragment();
-    let pos = 0;
-    for (const h of findTale(sent)) {
-      holder.append(sent.slice(pos, h.i));
-      const m = el("mark", null, sent.slice(h.i, h.i+h.len)); m.title = h.why; holder.append(m);
-      pos = h.i + h.len;
-    }
-    holder.append(sent.slice(pos));
-    box.append(holder);
+/* ---------- Egen tekst ----------
+   The text is the record: E.text is cut into sentences on every render, flagged sentences are
+   clickable, and a fix is written straight back into the text. Works with or without Claude. */
+const SAMPLE = "Novellen handler om en dreng der hedder Malte og han er ligesom meget ensom. og så en dag møder han en gammel mand i parken og de begynder at snakke og så bliver de venner. Fordi Malte ikke har nogen andre. Manden han fortæller om krigen og det er mega spændende for Malte. Jeg synes novellen er god fordi at den viser at venskab kan opstå alle steder";
+const freshE = () => ({text:"", skipped:new Set(), fixed:new Set(), claude:new Map(), ros:"", startFlags:0, open:null});
+const E = freshE();
+const isFlag = sg => sg.issues.length > 0 && !E.skipped.has(sg.key);
+
+function analyseDoc(text){
+  const segs = segment(text), starts = [];
+  for (const sg of segs) {
+    if (sg.t !== "s") continue;
+    sg.key = norm(sg.text);
+    sg.issues = sentenceIssues(sg.text, starts);
+    const c = E.claude.get(sg.key); if (c) sg.issues.push({kind:"claude", tip:c});
+    starts.push(firstWord(sg.text).toLowerCase());
   }
-  return box;
+  return segs;
 }
-function runMark(){
-  const text = $("egenTekst").value.trim(); if (!text) return;
-  const out = $("egenOut"); out.replaceChildren();
-  const tale = findTale(text), longs = sentences(text).filter(s=>words(s)>22);
-  out.append(el("h3",null, tale.length || longs.length ? "Her lyder det som tale" : "Ingen talesprog fundet"));
-  const lg = el("div","legend");
-  const a = el("span"); a.append(el("mark",null,"gul")," = talesprog"); const b = el("span"); b.append(el("span","long","bølget")," = meget lang sætning");
-  lg.append(a,b); out.append(lg, markText(text));
-  out.append(el("p","note", claudeState==="on" ? "Ret selv det markerede, eller få Claude til at udpege de 3 vigtigste sætninger." : "Ret selv det markerede. Læs teksten højt bagefter."));
-  $("egenRw").replaceChildren(); $("egenFinal").replaceChildren();
-  paintClaude();
+function runCheck(fresh){
+  const text = $("egenTekst").value.trim(); if (text.length < 2) return;
+  if (fresh || !E.text) Object.assign(E, freshE());
+  E.text = text; E.open = null;
+  const sents = analyseDoc(text).filter(x => x.t === "s");
+  const flagged = sents.filter(isFlag).length;
+  E.startFlags = Math.max(E.startFlags, flagged);
+  $("egenInput").hidden = true; $("egenWork").hidden = false;
+  renderEgen();
+  $("egenWork").scrollIntoView({block:"start"});
 }
-let egen = null;
+
+function fillSentence(holder, text){
+  let pos = 0;
+  for (const h of findTale(text, false)) {
+    holder.append(text.slice(pos, h.i));
+    holder.append(el("mark", null, text.slice(h.i, h.i + h.len)));
+    pos = h.i + h.len;
+  }
+  holder.append(text.slice(pos));
+}
+function renderEgen(){
+  const segs = analyseDoc(E.text), sents = segs.filter(x => x.t === "s");
+  const flagged = sents.filter(isFlag);
+  // summary
+  const sum = $("egenSummary"); sum.replaceChildren();
+  const skippedN = sents.filter(x => x.issues.length && E.skipped.has(x.key)).length;
+  const done = Math.max(0, E.startFlags - flagged.length - skippedN);
+  sum.append(el("p","big", flagged.length
+    ? `${flagged.length} ${flagged.length === 1 ? "sætning" : "sætninger"} at kigge på`
+    : E.startFlags ? "Ikke flere sætninger at kigge på" : "Ingen sætninger at kigge på"));
+  if (E.startFlags) {
+    const bar = el("div","bar"); const fill = el("span"); fill.style.width = Math.round(100 * done / E.startFlags) + "%"; bar.append(fill);
+    sum.append(bar, el("p","note", `Du har rettet ${done} af ${E.startFlags}.` + (skippedN ? ` ${skippedN} lader du være.` : "") + ` Teksten har ${sents.length} sætninger.`));
+  }
+  const counts = {};
+  for (const sg of flagged) for (const k of new Set(sg.issues.map(i => i.kind))) counts[k] = (counts[k] || 0) + 1;
+  if (Object.keys(counts).length) {
+    const chips = el("div","chips");
+    for (const k in counts) chips.append(el("span","chip", `${counts[k]} × ${KINDS[k]}`));
+    sum.append(chips);
+  }
+  if (E.ros) { const r = el("div","fbrow good"); r.append(el("span","label","Claude siger"), el("p",null,E.ros)); sum.append(r); }
+  if (!flagged.length) sum.append(el("p",null, E.startFlags
+    ? "Flot. Læs teksten højt en sidste gang, og kopiér den så."
+    : claudeState === "on" ? "Jeg kan ikke finde talesprog eller lange sætninger. Lad Claude kigge efter mere, eller læs den højt en sidste gang." : "Jeg kan ikke finde talesprog eller lange sætninger. Læs den højt en sidste gang."));
+  // text with clickable sentences
+  const box = $("egenMarked"); box.replaceChildren();
+  let ord = -1;
+  for (const sg of segs) {
+    if (sg.t === "g") { box.append(sg.text); continue; }
+    ord++;
+    const myOrd = ord;
+    const span = el("span", "sent" + (isFlag(sg) ? " flag" : E.skipped.has(sg.key) && sg.issues.length ? " skipped" : E.fixed.has(sg.key) ? " fixed" : "") + (E.open === myOrd ? " open" : ""));
+    span.tabIndex = 0; span.setAttribute("role","button");
+    span.setAttribute("aria-label", (isFlag(sg) ? `Ret denne sætning (${sg.issues.length} ting): ` : "Ret sætningen: ") + sg.text);
+    fillSentence(span, sg.text);
+    const open = () => { E.open = E.open === myOrd ? null : myOrd; renderEgen(); if (E.open !== null) $("egenEdit")?.focus({preventScroll:true}); $("egenEditor")?.scrollIntoView({block:"nearest"}); };
+    span.onclick = open;
+    span.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+    box.append(span);
+    if (E.open === myOrd) box.append(buildEditor(sg, myOrd, sents));
+  }
+  $("ttsAll").hidden = !daVoice;
+}
+
+function buildEditor(sg, ord, sents){
+  const ed = el("div","edit"); ed.id = "egenEditor";
+  const flagged = isFlag(sg) || (sg.issues.length && E.skipped.has(sg.key));
+  ed.append(el("span","label", flagged ? "Ret sætningen" : "Ret sætningen, hvis du vil"));
+  if (sg.issues.length) { const ul = el("ul","tips"); sg.issues.forEach(i => ul.append(el("li",null,i.tip))); ed.append(ul); }
+  else ed.append(el("p","note","Her har appen ikke fundet noget. Læs den højt og mærk efter."));
+  const ta = el("textarea","paper"); ta.id = "egenEdit"; ta.lang = "da"; ta.spellcheck = true; ta.value = sg.text;
+  ta.setAttribute("aria-label","Din nye version af sætningen");
+  const lights = el("div","lights"), hint = el("p","hint");
+  const paint = () => { paintLights(ta.value, lights, hint); put.disabled = !ta.value.trim() || ta.value.trim() === sg.text; };
+  const row = el("div","actions");
+  const put = el("button","btn primary","Sæt ind i teksten");
+  put.onclick = () => replaceSentence(sg, ord, ta.value);
+  row.append(put);
+  if (daVoice) { const l = el("button","btn ghost","Lyt"); l.onclick = () => speak(ta.value, l, "Lyt"); row.append(l); }
+  const fb = el("div"); fb.setAttribute("aria-live","polite");
+  if (claudeState === "on") {
+    const ask = el("button","btn ghost","Spørg Claude"); let tries = 0;
+    ask.onclick = async () => {
+      if (!ta.value.trim()) return;
+      tries++; ask.disabled = true; thinking(fb, "Claude læser");
+      try {
+        const r = await askClaude("egen", {original: sg.text, hint: sg.issues.map(i => i.tip).join(" ") || "Ingen"}, ta.value.trim(), tries);
+        renderFb(fb, r, "", tries, 0);
+      } catch (e) { if (e && e.code !== "cancelled") fb.replaceChildren(el("p","note",claudeError(e))); tries--; }
+      ask.disabled = false;
+    };
+    row.append(ask);
+  }
+  if (isFlag(sg)) { const skip = el("button","btn link","Lad den være"); skip.onclick = () => { E.skipped.add(sg.key); E.open = nextFlag(sents, ord + 1); renderEgen(); }; row.append(skip); }
+  const close = el("button","btn link","Luk"); close.onclick = () => { E.open = null; renderEgen(); }; row.append(close);
+  ta.addEventListener("input", paint);
+  ta.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !put.disabled) put.click(); });
+  ed.append(ta, lights, hint, row, fb);
+  paint();
+  return ed;
+}
+function nextFlag(sents, from){
+  for (let k = from; k < sents.length; k++) if (isFlag(sents[k])) return k;
+  for (let k = 0; k < Math.min(from, sents.length); k++) if (isFlag(sents[k])) return k;
+  return null;
+}
+function replaceSentence(sg, ord, value){
+  const v = value.trim(); if (!v) return;
+  E.text = E.text.slice(0, sg.start) + v + E.text.slice(sg.end);
+  $("egenTekst").value = E.text;
+  const end = sg.start + v.length, sents = analyseDoc(E.text).filter(x => x.t === "s");
+  let made = 0;
+  for (const x of sents) if (x.start >= sg.start && x.end <= end) { made++; if (!x.issues.length) E.fixed.add(x.key); }
+  markToday(); save();
+  E.open = nextFlag(sents, ord + Math.max(1, made));
+  renderEgen();
+  if (E.open !== null) { $("egenEdit")?.focus({preventScroll:true}); $("egenEditor")?.scrollIntoView({block:"nearest", behavior:"smooth"}); }
+}
+async function copyText(){
+  const b = $("copyBtn");
+  try { await navigator.clipboard.writeText(E.text); b.textContent = "Kopieret"; }
+  catch (e) { $("editAll").click(); $("egenTekst").select(); b.textContent = "Kopiér teksten"; return; }
+  setTimeout(() => b.textContent = "Kopiér teksten", 2200);
+}
 async function runFind(){
-  const text = $("egenTekst").value.trim(); if (!text) return;
-  const rw = $("egenRw"); thinking(rw, "Claude finder de vigtigste sætninger");
-  $("findBtn").disabled = true;
+  if (!E.text) return;
+  const b = $("findBtn"); b.disabled = true; b.textContent = "Claude læser …";
   try {
     const res = await askJSON(`Du er skrivecoach for Frede, en kvik dansk skoleelev, der skriver meget som han taler. Her er en tekst, han har skrevet til skolen.
 
@@ -829,60 +1064,41 @@ Hvis teksten allerede er klar, så giv en tom liste og sig det i rosen.
 
 Teksten:
 """
-${text.slice(0,4000)}
+${E.text.slice(0,4000)}
 """
 
 Svar kun med JSON: {"ros":"…","saetninger":[{"original":"…","hint":"…"}]}`, FIND_SCHEMA);
-    const list = (Array.isArray(res && res.saetninger) ? res.saetninger : []).filter(x=>x && typeof x.original==="string" && x.original.trim()).slice(0,3);
-    egen = {text, items: list.map(x=>({original:x.original.trim(), hint:String(x.hint||"").trim(), text:"", tries:0, best:0}))};
-    rw.replaceChildren();
-    if (res && res.ros) { const r=el("div","fbrow good"); r.append(el("span","label","Godt"), el("p",null,String(res.ros))); rw.append(r); }
-    if (!egen.items.length) { rw.append(el("p",null,"Claude fandt ingen sætninger, der skal rettes. Flot.")); return; }
-    rw.append(el("h3",null,"Skriv dem om selv"));
-    egen.items.forEach((it,k) => rw.append(rewriteCard(it,k)));
-    const fin = el("button","btn ghost","Sæt mine rettelser ind i teksten"); fin.onclick = assemble;
-    rw.append(fin);
-  } catch(e) {
-    rw.replaceChildren(el("p","note", claudeError(e)));
-  } finally { $("findBtn").disabled = false; }
+    E.ros = String(res && res.ros || "").trim();
+    const sents = analyseDoc(E.text).filter(x => x.t === "s");
+    for (const x of (Array.isArray(res && res.saetninger) ? res.saetninger : []).slice(0, 3)) {
+      const o = norm(String(x && x.original || "")); if (o.length < 3) continue;
+      const hit = sents.find(sg => sg.key.includes(o) || (sg.key.length > 10 && o.includes(sg.key)));
+      if (hit) { E.claude.set(hit.key, String(x.hint || "Claude synes, denne kan blive klarere.").trim()); E.skipped.delete(hit.key); }
+    }
+    const flagged = analyseDoc(E.text).filter(x => x.t === "s" && isFlag(x)).length;
+    E.startFlags = Math.max(E.startFlags, flagged);
+    renderEgen();
+  } catch (e) {
+    $("egenSummary").append(el("p","note", claudeError(e)));
+  } finally { b.disabled = false; b.textContent = "Find mere med Claude"; }
 }
-function rewriteCard(it, k){
-  const card = el("div","rw");
-  card.append(el("span","label",`Sætning ${k+1}`), el("p","orig","“"+it.original+"”"));
-  if (it.hint) card.append(el("p","trick",it.hint));
-  const ta = el("textarea","paper"); ta.id = "rw"+k; ta.lang="da"; ta.spellcheck=true; ta.placeholder="Skriv sætningen om …";
-  ta.setAttribute("aria-label",`Ny version af sætning ${k+1}`);
-  const btn = el("button","btn primary","Tjek"); btn.disabled = true;
-  const fb = el("div"); fb.setAttribute("aria-live","polite");
-  ta.oninput = () => { it.text = ta.value; btn.disabled = ta.value.trim().length < 3; };
-  btn.onclick = async () => {
-    it.tries++; btn.disabled = true; thinking(fb, "Claude læser");
-    try {
-      const r = await askClaude("egen", it, ta.value.trim(), it.tries);
-      const prev = it.best; it.best = Math.max(it.best, r.stjerner);
-      renderFb(fb, r, "", it.tries, prev);
-    } catch(e) { if (e && e.code!=="cancelled") fb.replaceChildren(el("p","note",claudeError(e))); it.tries--; }
-    btn.disabled = false; btn.textContent = "Tjek igen";
-  };
-  const row = el("div","actions"); row.append(btn);
-  card.append(ta, row, fb); return card;
+
+/* Read aloud: the voice pauses at every punktum, so a missing one is easy to hear. Only with a Danish voice. */
+let daVoice = null;
+function pickVoice(){
+  try { daVoice = speechSynthesis.getVoices().find(v => /^da/i.test(v.lang)) || null; } catch (e) { daVoice = null; }
+  if (!$("egenWork").hidden) $("ttsAll").hidden = !daVoice;
 }
-function assemble(){
-  let t = egen.text, n = 0;
-  for (const it of egen.items) if (it.text.trim() && t.includes(it.original)) { t = t.replace(it.original, it.text.trim()); n++; }
-  const out = $("egenFinal"); out.replaceChildren();
-  out.append(el("h3",null,"Din tekst med dine rettelser"));
-  if (!n) out.append(el("p","note","Skriv mindst én sætning om først."));
-  const ta = el("textarea","paper big"); ta.id="samlet"; ta.value = t; ta.setAttribute("aria-label","Samlet tekst");
-  const cp = el("button","btn primary","Kopiér teksten");
-  cp.onclick = async () => {
-    try { await navigator.clipboard.writeText(ta.value); cp.textContent = "Kopieret"; }
-    catch(e) { ta.focus(); ta.select(); cp.textContent = "Markeret. Tryk kopiér"; }
-    setTimeout(()=>cp.textContent="Kopiér teksten", 2200);
-  };
-  const row = el("div","actions"); row.append(cp);
-  out.append(ta,row);
-  if (n) { store.total += n; markToday(); save(); paintHome(); }
+if ("speechSynthesis" in window) { pickVoice(); try { speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) {} }
+let speaking = null;
+function stopSpeech(){ try { speechSynthesis.cancel(); } catch (e) {} if (speaking) { speaking.btn.textContent = speaking.label; speaking = null; } }
+function speak(text, btn, label){
+  const again = speaking && speaking.btn === btn;
+  stopSpeech(); if (again || !text.trim() || !daVoice) return;
+  const u = new SpeechSynthesisUtterance(text); u.voice = daVoice; u.lang = daVoice.lang; u.rate = 0.95;
+  u.onend = u.onerror = () => { if (speaking && speaking.u === u) stopSpeech(); };
+  speaking = {btn, label, u}; btn.textContent = "Stop";
+  speechSynthesis.speak(u);
 }
 
 /* ---------- Kobl knapper ---------- */
@@ -897,10 +1113,15 @@ $("quitTask").onclick = () => { ctl?.abort(); if (S && S.items.slice(0,S.i+1).so
 $("homeBtn").onclick = () => { paintHome(); show("home"); };
 $("againBtn").onclick = () => startSession(DAILY);
 $("logo").onclick = () => { ctl?.abort(); paintHome(); show("home"); };
-$("quitEgen").onclick = () => { paintHome(); show("home"); };
+$("quitEgen").onclick = () => { stopSpeech(); paintHome(); show("home"); };
 $("egenTekst").addEventListener("input", () => { $("markBtn").disabled = $("egenTekst").value.trim().length < 10; });
-$("markBtn").onclick = runMark;
+$("markBtn").onclick = () => runCheck();
+$("egenSample").onclick = () => { $("egenTekst").value = SAMPLE; runCheck(true); };
 $("findBtn").onclick = runFind;
+$("copyBtn").onclick = copyText;
+$("editAll").onclick = () => { stopSpeech(); $("egenTekst").value = E.text; $("egenWork").hidden = true; $("egenInput").hidden = false; $("markBtn").disabled = false; $("markBtn").textContent = "Tjek igen"; $("egenTekst").focus(); };
+$("newText").onclick = () => { stopSpeech(); Object.assign(E, freshE()); $("egenTekst").value = ""; $("egenWork").hidden = true; $("egenInput").hidden = false; $("markBtn").disabled = true; $("markBtn").textContent = "Tjek teksten"; $("egenTekst").focus(); };
+$("ttsAll").onclick = () => speak(E.text, $("ttsAll"), "Lyt til teksten");
 $("keySave").onclick = saveKey;
 $("keyRemove").onclick = removeKey;
 $("keyInput").addEventListener("keydown", e => { if (e.key === "Enter") saveKey(); });
