@@ -164,6 +164,12 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
 .rw .orig{font-style:italic;font-size:17.5px}
 .rw textarea.paper{min-height:98px}
 .rw .fb{border:0;padding:0}
+.keybox{border-top:1px solid var(--line);padding-top:16px}
+.keybox summary{cursor:pointer;color:var(--muted);font-size:15px}
+.keybody{display:flex;flex-direction:column;gap:10px;margin-top:12px;max-width:60ch}
+.keybody a{color:var(--accent)}
+#keyInput{font:inherit;font-size:16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);width:100%}
+#keyInput:focus{outline:none;border-color:var(--accent)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -208,6 +214,22 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
     </section>
 
     <p class="stats" id="stats"></p>
+
+    <details class="keybox" id="keyBox" hidden>
+      <summary>For voksne: slå Claude til på denne enhed</summary>
+      <div class="keybody">
+        <p>Her kan Claude kun læse med, hvis du sætter en API-nøgle ind. Du laver den på <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Nøglen bliver kun gemt i denne browser og kommer aldrig med i koden på GitHub.</p>
+        <p class="note">Brug en nøgle kun til Punktum, og sæt en lille månedlig udgiftsgrænse i Console. Så kan der højst gå det beløb tabt, hvis nøglen slipper ud.</p>
+        <p class="note" id="keyState"></p>
+        <label for="keyInput" class="label">API-nøgle</label>
+        <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+        <div class="actions">
+          <button class="btn primary" id="keySave">Gem og test</button>
+          <button class="btn link" id="keyRemove" hidden>Fjern nøglen</button>
+        </div>
+        <p class="note" id="keyMsg" aria-live="polite"></p>
+      </div>
+    </details>
   </main>
 
   <!-- TASK -->
@@ -354,23 +376,112 @@ function streak(){
   return n;
 }
 
-/* ---------- Claude ---------- */
+/* ---------- Claude ----------
+   Two routes to the same coach:
+   1. On claude.ai the page asks Claude through the viewer's own account (the `sample` capability).
+   2. Anywhere else (GitHub Pages) it calls the Claude API with a key a grown-up saved on this device. */
 let sample = null, claudeState = "wait"; // wait | on | off
 const samplePromise = (window.claude && typeof window.claude.use === "function")
   ? window.claude.use("sample").catch(()=>null) : Promise.resolve(null);
-samplePromise.then(s => { sample = s; claudeState = s ? "on" : "off"; paintClaude(); });
+samplePromise.then(s => { sample = s; claudeState = (s || apiKey()) ? "on" : "off"; paintClaude(); paintKeyBox(); });
 function paintClaude(){
   const p = document.getElementById("claudePill");
-  if (claudeState==="off") $("heroText").textContent = "Ca. 10 minutter. Du skriver, lamperne viser hvad der skal rettes, og du sammenligner med et godt bud. Ingen grammatik.";
+  $("heroText").textContent = claudeState==="off"
+    ? "Ca. 10 minutter. Du skriver, lamperne viser hvad der skal rettes, og du sammenligner med et godt bud. Ingen grammatik."
+    : "Ca. 10 minutter. Du skriver, Claude læser med og giver dig ét godt råd ad gangen. Ingen grammatik.";
   p.textContent = claudeState==="on" ? "Claude læser med" : claudeState==="off" ? "Øvetilstand uden Claude" : "Forbinder til Claude …";
   document.getElementById("findBtn").hidden = claudeState!=="on" || !document.getElementById("egenOut").childElementCount;
 }
-const HARD_OFF = ["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"];
+const HARD_OFF = ["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed","bad_key"];
 function claudeError(e){
+  if (e && e.code === "bad_key") { claudeState = "off"; paintClaude(); return "Claude-nøglen virker ikke. Bed en voksen tjekke den nederst på forsiden. Du kan stadig øve dig."; }
   if (e && HARD_OFF.includes(e.code)) { claudeState = "off"; paintClaude(); return "Claude er ikke slået til her. Du kan stadig øve dig og sammenligne med et godt bud."; }
   if (e && e.code === "rate_limited") return "Claude skal lige have en pause. Prøv igen om lidt.";
   if (e && e.code === "session_expired") return "Du skal logge ind igen for at få hjælp af Claude.";
   return "Det gik ikke at få svar fra Claude. Prøv igen.";
+}
+
+/* API route: the key lives only in this browser's localStorage, never in the page source. */
+const KEY_STORE = "punktum.apikey";
+const MODEL = "claude-opus-5-5";
+function apiKey(){ try { return localStorage.getItem(KEY_STORE) || ""; } catch(e) { return ""; } }
+let sdkPromise = null;
+function loadSdk(){ return sdkPromise ||= import("./vendor/anthropic-sdk-0.134.0.js").then(m => m.default); }
+const FEEDBACK_SCHEMA = {
+  type:"object", additionalProperties:false,
+  required:["stjerner","ros","tip","rettelser","godt_bud"],
+  properties:{
+    stjerner:{type:"integer", enum:[1,2,3]},
+    ros:{type:"string"}, tip:{type:"string"}, godt_bud:{type:"string"},
+    rettelser:{type:"array", items:{type:"object", additionalProperties:false, required:["fra","til"], properties:{fra:{type:"string"}, til:{type:"string"}}}}
+  }
+};
+const FIND_SCHEMA = {
+  type:"object", additionalProperties:false, required:["ros","saetninger"],
+  properties:{
+    ros:{type:"string"},
+    saetninger:{type:"array", items:{type:"object", additionalProperties:false, required:["original","hint"], properties:{original:{type:"string"}, hint:{type:"string"}}}}
+  }
+};
+async function apiJSON(prompt, schema, signal, key = apiKey()){
+  const Anthropic = await loadSdk();
+  const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true, maxRetries: 1 });
+  let res;
+  try {
+    res = await client.beta.messages.create({
+      model: MODEL,
+      max_tokens: 16000,
+      output_config: { effort: "low", format: { type: "json_schema", schema } },
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      messages: [{ role: "user", content: prompt }]
+    }, { signal });
+  } catch (e) {
+    if (e instanceof Anthropic.APIUserAbortError) throw {code:"cancelled"};
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw {code:"bad_key"};
+    if (e instanceof Anthropic.RateLimitError) throw {code:"rate_limited"};
+    throw {code:"upstream_error", message:String(e && e.message || e)};
+  }
+  if (res.stop_reason === "refusal") throw {code:"refused"};
+  const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
+  try { return JSON.parse(text); } catch (e) { throw {code:"invalid_json"}; }
+}
+// One entry point for both routes. `fast` = a short check of one answer.
+async function askJSON(prompt, schema, {fast = false, signal} = {}){
+  const s = sample || await samplePromise;
+  if (s) return s.json(prompt, fast ? {modelTier:"quick", signal} : {modelTier:"default", effort:"low", signal});
+  if (apiKey()) return apiJSON(prompt, schema, signal);
+  throw {code:"not_declared"};
+}
+
+/* Grown-up settings: only shown where the claude.ai route is missing. */
+function paintKeyBox(){
+  const box = $("keyBox"); box.hidden = !!sample || claudeState === "wait";
+  const has = !!apiKey();
+  $("keyState").textContent = has ? "Claude er slået til på denne enhed." : "Ingen nøgle på denne enhed endnu.";
+  $("keyRemove").hidden = !has;
+}
+async function saveKey(){
+  const key = $("keyInput").value.trim(), out = $("keyMsg");
+  if (!/^sk-ant-/.test(key)) { out.textContent = "Det ligner ikke en Claude API-nøgle. Den starter med sk-ant-."; return; }
+  $("keySave").disabled = true; out.textContent = "Tester nøglen …";
+  try {
+    const r = await apiJSON('Svar med JSON: {"ok": true}', {type:"object", additionalProperties:false, required:["ok"], properties:{ok:{type:"boolean"}}}, undefined, key);
+    if (!r || r.ok !== true) throw {code:"invalid_json"};
+    try { localStorage.setItem(KEY_STORE, key); } catch(e) { out.textContent = "Browseren vil ikke gemme nøglen (privat vindue?). Prøv i et almindeligt vindue."; return; }
+    $("keyInput").value = ""; claudeState = "on"; out.textContent = "Nøglen virker og er gemt. Claude læser nu med.";
+    paintClaude(); paintKeyBox();
+  } catch (e) {
+    out.textContent = e && e.code === "bad_key" ? "Nøglen blev afvist. Tjek at den er kopieret helt."
+      : e && e.code === "rate_limited" ? "Kontoen har ramt en grænse. Tjek forbrug og kredit i Claude Console."
+      : "Det gik ikke at teste nøglen. Prøv igen om lidt.";
+  } finally { $("keySave").disabled = false; }
+}
+function removeKey(){
+  try { localStorage.removeItem(KEY_STORE); } catch(e) {}
+  if (!sample) claudeState = "off";
+  $("keyMsg").textContent = "Nøglen er fjernet fra denne enhed.";
+  paintClaude(); paintKeyBox();
 }
 
 /* ---------- Talesprog-tjek (lokalt, øjeblikkeligt) ---------- */
@@ -613,10 +724,9 @@ function renderOffline(box, model, onRate, msg){
 }
 
 async function askClaude(mode, item, text, tries){
-  const s = sample || await samplePromise;
-  if (!s || claudeState==="off") throw {code:"not_declared"};
+  if (claudeState==="off") throw {code:"not_declared"};
   ctl = new AbortController();
-  const raw = await s.json(feedbackPrompt(mode, item, text, tries), {modelTier:"quick", signal:ctl.signal});
+  const raw = await askJSON(feedbackPrompt(mode, item, text, tries), FEEDBACK_SCHEMA, {fast:true, signal:ctl.signal});
   return clean(raw);
 }
 
@@ -709,8 +819,7 @@ async function runFind(){
   const rw = $("egenRw"); thinking(rw, "Claude finder de vigtigste sætninger");
   $("findBtn").disabled = true;
   try {
-    const s = sample || await samplePromise; if (!s) throw {code:"not_declared"};
-    const res = await s.json(`Du er skrivecoach for Frede, en kvik dansk skoleelev, der skriver meget som han taler. Her er en tekst, han har skrevet til skolen.
+    const res = await askJSON(`Du er skrivecoach for Frede, en kvik dansk skoleelev, der skriver meget som han taler. Her er en tekst, han har skrevet til skolen.
 
 Find de sætninger (højst 3), der mest trænger til at blive skrevet om: talesprog, halve sætninger, alt for lange "og så"-sætninger eller uklarhed. Spring kommaer over.
 Du må IKKE skrive sætningerne om for ham. Han skal selv gøre det.
@@ -723,7 +832,7 @@ Teksten:
 ${text.slice(0,4000)}
 """
 
-Svar kun med JSON: {"ros":"…","saetninger":[{"original":"…","hint":"…"}]}`, {modelTier:"default", effort:"low"});
+Svar kun med JSON: {"ros":"…","saetninger":[{"original":"…","hint":"…"}]}`, FIND_SCHEMA);
     const list = (Array.isArray(res && res.saetninger) ? res.saetninger : []).filter(x=>x && typeof x.original==="string" && x.original.trim()).slice(0,3);
     egen = {text, items: list.map(x=>({original:x.original.trim(), hint:String(x.hint||"").trim(), text:"", tries:0, best:0}))};
     rw.replaceChildren();
@@ -792,6 +901,9 @@ $("quitEgen").onclick = () => { paintHome(); show("home"); };
 $("egenTekst").addEventListener("input", () => { $("markBtn").disabled = $("egenTekst").value.trim().length < 10; });
 $("markBtn").onclick = runMark;
 $("findBtn").onclick = runFind;
+$("keySave").onclick = saveKey;
+$("keyRemove").onclick = removeKey;
+$("keyInput").addEventListener("keydown", e => { if (e.key === "Enter") saveKey(); });
 </script>
 
 </body>
