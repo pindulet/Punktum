@@ -8,7 +8,11 @@ Skrivetræning for Frede: korte øvelser hvor talesprog bliver til klare, hele s
 - **Svar rigtigt** – svar på spørgsmål i hele sætninger
 - **Tjek din egen tekst** – find talesprog i en skoletekst
 
-Hele appen er én fil: `index.html`. Fremskridt gemmes i browseren (localStorage).
+Appen er `index.html` plus filerne i `vendor/`. Fremskridt gemmes i browseren (localStorage).
+
+## Stavekontrol
+
+Stavekontrollen kører i browseren uden internet efter første indlæsning: Hunspell som WebAssembly med Stavekontroldens danske ordbog (`vendor/da.aff`, `vendor/da.dic`). Sammensatte ord godkendes kun, når de kan deles i to rigtige ord, så fejl som "desvære" og "fodbolkamp" ikke slipper igennem. Forslag sorteres efter, hvor almindelige ordene er (`vendor/da-freq.txt`). Licenser står i `vendor/THIRD-PARTY.md`.
 
 ## Claude som skrivecoach
 

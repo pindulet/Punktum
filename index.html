@@ -18,7 +18,7 @@
   --accent:#2C55E6; --accent-ink:#FFFFFF;
   --hero:#131B31; --hero-fg:#F3F5FA; --hero-muted:#AEB8D6;
   --marker:#FFE14F; --marker-ink:#131B31;
-  --good:#127A53; --good-bg:#E1F4EA; --warn:#A35F00; --warn-bg:#FFF1D6;
+  --good:#127A53; --good-bg:#E1F4EA; --warn:#A35F00; --warn-bg:#FFF1D6; --bad:#C2362B;
   --display:"Bricolage Grotesque","Arial Rounded MT Bold",system-ui,sans-serif;
   --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
@@ -27,7 +27,7 @@
   --accent:#7E9DFF; --accent-ink:#0E1322;
   --hero:#1F2A4A; --hero-fg:#F3F5FA; --hero-muted:#AEB8D6;
   --marker:#7A6400; --marker-ink:#FFF6CC;
-  --good:#53CC9B; --good-bg:#14322A; --warn:#F2B04A; --warn-bg:#3A2C12;
+  --good:#53CC9B; --good-bg:#14322A; --warn:#F2B04A; --warn-bg:#3A2C12; --bad:#FF7F73;
   color-scheme:dark;
 }}
 :root[data-theme="dark"]{
@@ -35,7 +35,7 @@
   --accent:#7E9DFF; --accent-ink:#0E1322;
   --hero:#1F2A4A; --hero-fg:#F3F5FA; --hero-muted:#AEB8D6;
   --marker:#7A6400; --marker-ink:#FFF6CC;
-  --good:#53CC9B; --good-bg:#14322A; --warn:#F2B04A; --warn-bg:#3A2C12;
+  --good:#53CC9B; --good-bg:#14322A; --warn:#F2B04A; --warn-bg:#3A2C12; --bad:#FF7F73;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -162,6 +162,7 @@ mark{background:linear-gradient(transparent 12%,var(--marker) 12%,var(--marker) 
 .marked .sent{cursor:pointer;border-radius:4px;padding:1px 0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .marked .sent:hover{background:var(--rule)}
 .marked .sent.flag{background:var(--warn-bg);text-decoration:underline;text-decoration-color:var(--warn);text-decoration-thickness:2px;text-underline-offset:5px}
+.miss{text-decoration:underline wavy var(--bad);text-decoration-thickness:1.5px;text-underline-offset:4px}
 .marked .sent.fixed{background:var(--good-bg)}
 .marked .sent.skipped{opacity:.6}
 .marked .sent.open{outline:2px solid var(--accent);outline-offset:1px}
@@ -599,7 +600,7 @@ function taleTip(word){
   return `Slet “${word}”. Læs sætningen uden. Betyder den det samme?`;
 }
 const HALF = /^(?:fordi|selvom|så at|hvilket)(?![\p{L}\p{N}])/iu;
-const KINDS = {tale:"talesprog", ogsaa:"“og så”", long:"lange sætninger", og:"mange “og”", caps:"stort bogstav", end:"punktum mangler", half:"halve sætninger", start:"starter med “og”", repeat:"samme start", order:"ordenes rækkefølge", splice:"komma eller punktum", rverb:"r eller ikke r", ogat:"“og” eller “at”", dedem:"“de” eller “dem”", sin:"“sin” eller “hans”", stav:"stavning", claude:"Claude"};
+const KINDS = {tale:"talesprog", ogsaa:"“og så”", long:"lange sætninger", og:"mange “og”", caps:"stort bogstav", end:"punktum mangler", half:"halve sætninger", start:"starter med “og”", repeat:"samme start", order:"ordenes rækkefølge", splice:"komma eller punktum", rverb:"r eller ikke r", ogat:"“og” eller “at”", dedem:"“de” eller “dem”", sin:"“sin” eller “hans”", stav:"faste udtryk", spell:"stavning", claude:"Claude"};
 /* ---------- Sætningsopbygning: de klassiske fejl, når man skriver som man taler ----------
    Not a full parser. A small verb lexicon plus narrow rules, each tuned to stay quiet on correct text,
    and each tip shows the fix in the child's own words instead of naming grammar. */
@@ -629,7 +630,7 @@ const OGTRIG = new Set(["for","prøve","prøver","prøvede","begynde","begynder"
 const OWN = {mor:"sin",far:"sin",bror:"sin",søster:"sin",ven:"sin",veninde:"sin",kæreste:"sin",hund:"sin",kat:"sin",cykel:"sin",telefon:"sin",mobil:"sin",lærer:"sin",familie:"sin",taske:"sin",bog:"sin",mormor:"sin",farmor:"sin",morfar:"sin",farfar:"sin",onkel:"sin",moster:"sin",faster:"sin",bedstemor:"sin",bedstefar:"sin",kone:"sin",mand:"sin",datter:"sin",søn:"sin",værelse:"sit",hus:"sit",hjem:"sit",liv:"sit",navn:"sit",tøj:"sit",forældre:"sine",venner:"sine",søskende:"sine",børn:"sine",lektier:"sine"};
 const OBJ2SUBJ = {mig:"jeg", ham:"han", hende:"hun", os:"vi", dem:"de"};
 const STAV = [
-  [/(?<![\p{L}])nogen gange(?![\p{L}])/iu, "nogle gange"], [/(?<![\p{L}])nød til(?![\p{L}])/iu, "nødt til"],
+  [/(?<![\p{L}])(?:nogen gange|nogengange|noglegange)(?![\p{L}])/iu, "nogle gange"], [/(?<![\p{L}])nød til(?![\p{L}])/iu, "nødt til"],
   [/(?<![\p{L}])ihvertfald(?![\p{L}])/iu, "i hvert fald"], [/(?<![\p{L}])idag(?![\p{L}])/iu, "i dag"], [/(?<![\p{L}])igår(?![\p{L}])/iu, "i går"],
   [/(?<![\p{L}])imorgen(?![\p{L}])/iu, "i morgen"], [/(?<![\p{L}])istedet(?![\p{L}])/iu, "i stedet"], [/(?<![\p{L}])tilsidst(?![\p{L}])/iu, "til sidst"],
   [/(?<![\p{L}])iforvejen(?![\p{L}])/iu, "i forvejen"], [/(?<![\p{L}])overhoved(?![\p{L}])/iu, "overhovedet"],
@@ -723,6 +724,55 @@ function structureIssues(s){
   return iss;
 }
 
+/* ---------- Stavning: dansk ordbog (Stavekontrolden) i en baggrundsproces ----------
+   Loaded on first use; until it answers, everything else works without it. */
+const spell = {ready:null, call:null, state:"idle", bad:new Set(), ok:new Set(), sugg:new Map()};   // state: idle | loading | on | off
+function startSpell(){
+  if (spell.ready) return spell.ready;
+  let worker, seq = 0; const pend = new Map();
+  try { worker = new Worker("vendor/spell-worker.js"); } catch (e) { spell.state = "off"; return spell.ready = Promise.resolve(false); }
+  worker.onmessage = e => { const r = pend.get(e.data.id); if (r) { pend.delete(e.data.id); r(e.data); } };
+  worker.onerror = () => { spell.state = "off"; for (const r of pend.values()) r({ok:false}); pend.clear(); };
+  spell.call = m => new Promise(r => { const id = ++seq; pend.set(id, r); worker.postMessage({...m, id}); });
+  spell.state = "loading";
+  return spell.ready = spell.call({type:"init"}).then(m => { spell.state = m.ok ? "on" : "off"; return !!m.ok; });
+}
+// Words worth checking in one sentence: skips names (capitals inside the sentence), all-caps and single letters.
+function spellWords(s){
+  const out = [];
+  for (const m of s.matchAll(/(?<![\p{L}\d])\p{L}+(?:-\p{L}+)*(?![\p{L}\d])/gu)) {
+    const w = m[0];
+    if (w.length < 2 || w === w.toUpperCase() || (/^\p{Lu}/u.test(w) && m.index > 0)) continue;
+    out.push({w, i:m.index});
+  }
+  return out;
+}
+// Resolves true when it found misspellings it did not know about before.
+async function checkSpelling(text){
+  if (!(await startSpell())) return false;
+  const words = [...new Set(segment(text).filter(x => x.t === "s").flatMap(x => spellWords(x.text).map(o => o.w)))]
+    .filter(w => !spell.bad.has(w) && !spell.ok.has(w));
+  if (!words.length) return false;
+  const r = await spell.call({type:"check", words});
+  if (!r.bad) return false;
+  for (const w of words) (r.bad.includes(w) ? spell.bad : spell.ok).add(w);
+  return r.bad.length > 0;
+}
+// One tip for the misspelled words, with suggestions once they have arrived.
+const spellTip = words => words.map(w => {
+  const l = spell.sugg.get(w);
+  return !l ? `Tjek stavningen af “${w}”.` : l.length ? `Tjek stavningen af “${w}”. Mente du ${l.map(x => `“${x}”`).join(" eller ")}?` : `“${w}” findes ikke i ordbogen. Prøv at stave det på en anden måde.`;
+}).join(" ");
+async function suggestFor(w){
+  if (!spell.sugg.has(w)) { const r = await spell.call({type:"suggest", word:w}); spell.sugg.set(w, r.list || []); }
+  return spell.sugg.get(w);
+}
+const STAV_WORDS = new Set(["nogengange","noglegange","ihvertfald","idag","igår","imorgen","istedet","tilsidst","iforvejen"]);  // already handled with a better tip
+const missesIn = s => {
+  const tale = new Set(findTale(s, false).flatMap(h => h.word.toLowerCase().split(/\s+/)).concat([...STAV_WORDS]));
+  return spellWords(s).filter(o => spell.bad.has(o.w) && !tale.has(o.w.toLowerCase()));
+};
+
 // Everything worth a closer look in one sentence, each with a concrete tip. No grammar words.
 function sentenceIssues(s, prevStarts = []){
   const iss = [], wc = words(s), seen = new Set();
@@ -744,6 +794,8 @@ function sentenceIssues(s, prevStarts = []){
   const fw = firstWord(s).toLowerCase();
   if (fw && prevStarts.length >= 2 && prevStarts.slice(-2).every(x => x === fw)) iss.push({kind:"repeat", tip:`Tre sætninger i træk starter med “${capWord(fw)}”. Begynd denne på en anden måde.`});
   for (const x of structureIssues(s)) if (!(x.kind === "splice" && iss.some(i => i.kind === "long"))) iss.push(x);
+  const miss = [...new Set(missesIn(s).map(o => o.w))];
+  if (miss.length) iss.push({kind:"spell", words:miss, tip:spellTip(miss)});
   return iss;
 }
 // Concrete tips for an exercise answer when Claude is not reading along.
@@ -829,7 +881,7 @@ function buildModes(){
   const e = document.createElement("button");
   e.className = "mode wide";
   e.innerHTML = `<h3>Tjek din egen tekst</h3><p>Sæt en skoleopgave ind. Find talesproget, og ret de vigtigste sætninger selv.</p>`;
-  e.onclick = () => { show("egenView"); $("egenTekst").focus(); };
+  e.onclick = () => { startSpell(); show("egenView"); $("egenTekst").focus(); };
   box.append(e);
 }
 
@@ -844,6 +896,7 @@ function pick(mode){
   return it;
 }
 function startSession(modes){
+  startSpell();
   S = {items: modes.map(m => ({mode:m, item:pick(m), best:0, text:"", tries:0})), i:0};
   show("taskView"); loadTask();
 }
@@ -972,6 +1025,11 @@ async function askClaude(mode, item, text, tries){
   return clean(raw);
 }
 
+// Spelling for an exercise answer, with suggestions, but never more than a short wait.
+const spellWithin = (text, ms) => Promise.race([
+  checkSpelling(text).then(() => Promise.all(segment(text).filter(x => x.t === "s").flatMap(x => missesIn(x.text)).map(o => suggestFor(o.w)))),
+  new Promise(r => setTimeout(r, ms))
+]);
 async function check(){
   const c = cur(), text = $("svar").value.trim(); if (text.length < 3) return;
   const a = analyse(text);
@@ -991,9 +1049,11 @@ async function check(){
       if (e && e.code === "cancelled") return;
       const msg = claudeError(e);
       if (claudeState !== "off") { box.replaceChildren(el("p","note",msg)); c.tries--; done(); return; }
+      await spellWithin(text, 2500);
       offlineCheck(c, a, box, msg); done(); return;
     }
   }
+  await spellWithin(text, 2500);
   offlineCheck(c, a, box); done();
 }
 function offlineCheck(c, a, box, msg){
@@ -1058,18 +1118,30 @@ function runCheck(fresh){
   $("egenInput").hidden = true; $("egenWork").hidden = false;
   renderEgen();
   $("egenWork").scrollIntoView({block:"start"});
+  respell();
+}
+// Spelling answers a moment later: count its finds as part of the job, then redraw.
+function respell(){
+  checkSpelling(E.text).then(found => {
+    if (found) E.startFlags = Math.max(E.startFlags, analyseDoc(E.text).filter(x => x.t === "s" && isFlag(x)).length);
+    renderEgen();
+  });
 }
 
 function fillSentence(holder, text){
+  const marks = findTale(text, false).map(h => ({i:h.i, len:h.len, tag:"mark"}));
+  for (const o of missesIn(text)) if (!marks.some(m => o.i < m.i + m.len && m.i < o.i + o.w.length)) marks.push({i:o.i, len:o.w.length, tag:"span", cls:"miss"});
+  marks.sort((a, b) => a.i - b.i);
   let pos = 0;
-  for (const h of findTale(text, false)) {
-    holder.append(text.slice(pos, h.i));
-    holder.append(el("mark", null, text.slice(h.i, h.i + h.len)));
-    pos = h.i + h.len;
+  for (const m of marks) {
+    holder.append(text.slice(pos, m.i));
+    holder.append(el(m.tag, m.cls || null, text.slice(m.i, m.i + m.len)));
+    pos = m.i + m.len;
   }
   holder.append(text.slice(pos));
 }
 function renderEgen(){
+  const prev = $("egenEdit"), draft = prev ? {key:prev.dataset.key, v:prev.value, focus:document.activeElement === prev} : null;
   const segs = analyseDoc(E.text), sents = segs.filter(x => x.t === "s");
   const flagged = sents.filter(isFlag);
   // summary
@@ -1078,7 +1150,7 @@ function renderEgen(){
   const done = Math.max(0, E.startFlags - flagged.length - skippedN);
   sum.append(el("p","big", flagged.length
     ? `${flagged.length} ${flagged.length === 1 ? "sætning" : "sætninger"} at kigge på`
-    : E.startFlags ? "Ikke flere sætninger at kigge på" : "Ingen sætninger at kigge på"));
+    : E.startFlags ? "Ikke flere sætninger at kigge på" : spell.state === "loading" ? "Tjekker teksten …" : "Ingen sætninger at kigge på"));
   if (E.startFlags) {
     const bar = el("div","bar"); const fill = el("span"); fill.style.width = Math.round(100 * done / E.startFlags) + "%"; bar.append(fill);
     sum.append(bar, el("p","note", `Du har rettet ${done} af ${E.startFlags}.` + (skippedN ? ` ${skippedN} lader du være.` : "") + ` Teksten har ${sents.length} sætninger.`));
@@ -1091,7 +1163,8 @@ function renderEgen(){
     sum.append(chips);
   }
   if (E.ros) { const r = el("div","fbrow good"); r.append(el("span","label","Claude siger"), el("p",null,E.ros)); sum.append(r); }
-  if (!flagged.length) sum.append(el("p",null, E.startFlags
+  if (spell.state === "loading") sum.append(el("p","note","Stavekontrollen starter …"));
+  if (!flagged.length && spell.state !== "loading") sum.append(el("p",null, E.startFlags
     ? "Flot. Læs teksten højt en sidste gang, og kopiér den så."
     : claudeState === "on" ? "Jeg kan ikke finde talesprog eller lange sætninger. Lad Claude kigge efter mere, eller læs den højt en sidste gang." : "Jeg kan ikke finde talesprog eller lange sætninger. Læs den højt en sidste gang."));
   // text with clickable sentences
@@ -1109,7 +1182,12 @@ function renderEgen(){
     span.onclick = open;
     span.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
     box.append(span);
-    if (E.open === myOrd) box.append(buildEditor(sg, myOrd, sents));
+    if (E.open === myOrd) {
+      box.append(buildEditor(sg, myOrd, sents));
+      const ta = $("egenEdit");
+      if (draft && draft.key === sg.key && draft.v !== ta.value) { ta.value = draft.v; ta.dispatchEvent(new Event("input")); }
+      if (draft && draft.focus) ta.focus({preventScroll:true});
+    }
   }
   $("ttsAll").hidden = !daVoice;
 }
@@ -1118,9 +1196,16 @@ function buildEditor(sg, ord, sents){
   const ed = el("div","edit"); ed.id = "egenEditor";
   const flagged = isFlag(sg) || (sg.issues.length && E.skipped.has(sg.key));
   ed.append(el("span","label", flagged ? "Ret sætningen" : "Ret sætningen, hvis du vil"));
-  if (sg.issues.length) { const ul = el("ul","tips"); sg.issues.forEach(i => ul.append(el("li",null,i.tip))); ed.append(ul); }
+  if (sg.issues.length) {
+    const ul = el("ul","tips");
+    for (const i of sg.issues) {
+      const li = el("li", null, i.tip); ul.append(li);
+      if (i.kind === "spell") Promise.all(i.words.map(suggestFor)).then(() => { li.textContent = spellTip(i.words); });
+    }
+    ed.append(ul);
+  }
   else ed.append(el("p","note","Her har appen ikke fundet noget. Læs den højt og mærk efter."));
-  const ta = el("textarea","paper"); ta.id = "egenEdit"; ta.lang = "da"; ta.spellcheck = true; ta.value = sg.text;
+  const ta = el("textarea","paper"); ta.id = "egenEdit"; ta.lang = "da"; ta.spellcheck = true; ta.value = sg.text; ta.dataset.key = sg.key;
   ta.setAttribute("aria-label","Din nye version af sætningen");
   const lights = el("div","lights"), hint = el("p","hint");
   const paint = () => { paintLights(ta.value, lights, hint); put.disabled = !ta.value.trim() || ta.value.trim() === sg.text; };
@@ -1166,6 +1251,7 @@ function replaceSentence(sg, ord, value){
   markToday(); save();
   E.open = nextFlag(sents, ord + Math.max(1, made));
   renderEgen();
+  respell();
   if (E.open !== null) { $("egenEdit")?.focus({preventScroll:true}); $("egenEditor")?.scrollIntoView({block:"nearest", behavior:"smooth"}); }
 }
 async function copyText(){
